@@ -73,9 +73,23 @@ class ChatLLM:
         return chain
 
     def get_response(self, question):
+        database_description = (
+    "The database consists of two tables: `public.employees_table` and `public.departments_table`. This is a PostgreSQL database, so you need to use postgres-related queries.\n\n"
+    "The `public.employees_table` table records details about the employees in a company. It includes the following columns:\n"
+    "- `EmployeeID`: A unique identifier for each employee.\n"
+    "- `FirstName`: The first name of the employee.\n"
+    "- `LastName`: The last name of the employee.\n"
+    "- `DepartmentID`: A foreign key that links the employee to a department in the `public.departments_table` table.\n"
+    "- `Salary`: The salary of the employee.\n\n"
+    "The `public.departments_table` table contains information about the various departments in the company. It includes:\n"
+    "- `DepartmentID`: A unique identifier for each department.\n"
+    "- `DepartmentName`: The name of the department.\n"
+    "- `Location`: The location of the department.\n\n"
+    "The `DepartmentID` column in the `public.employees_table` table establishes a relationship between the employees and their respective departments in the `public.departments_table` table. This foreign key relationship allows us to join these tables to retrieve detailed information about employees and their departments."
+)
         # Call the chain with the user question
         print("question" + question)
-        response = self.chain.invoke({"question": question})
+        response = self.chain.invoke({"question": database_description + "using this info, answer" +  question})
         print("answer" + response)
         return response
 
