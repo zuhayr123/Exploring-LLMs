@@ -1,5 +1,5 @@
 import streamlit as st
-from chat_llm_module import ChatLLM
+from chat_llm_module_memory import ChatLLM
 
 # Initialize the chat LLM model
 chat_llm = ChatLLM()
