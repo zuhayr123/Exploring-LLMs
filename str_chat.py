@@ -1,16 +1,13 @@
 import streamlit as st
 from chat_llm_module_memory import ChatLLM
 
-# Initialize the chat LLM model
-chat_llm = ChatLLM()
-
 # Injecting custom CSS for the chat bubbles
 def set_custom_css():
     st.markdown("""
     <style>
     .user_message {
-        background-color: #A8DADC;  /* Light blue for user */
-        color: #1D3557;  /* Dark blue text for contrast */
+        background-color: #A8DADC;
+        color: #1D3557;
         padding: 10px 15px;
         margin-bottom: 10px;
         border-radius: 20px;
@@ -22,8 +19,8 @@ def set_custom_css():
     }
 
     .bot_message {
-        background-color: #F1FAEE;  /* Very light green for bot */
-        color: #457B9D;  /* Darker blue-green text for contrast */
+        background-color: #F1FAEE;
+        color: #457B9D;
         padding: 10px 15px;
         margin-bottom: 10px;
         border-radius: 20px;
@@ -41,7 +38,6 @@ def set_custom_css():
     body {
         background-color: #F8F9FA;
     }
-    
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,6 +51,12 @@ def main():
     # Store the conversation in the session state
     if "conversation" not in st.session_state:
         st.session_state.conversation = []
+
+    # Initialize the chat LLM model, store in session state
+    if "chat_llm" not in st.session_state:
+        st.session_state.chat_llm = ChatLLM()
+
+    chat_llm = st.session_state.chat_llm
 
     # Input form for the question
     with st.form("chat_form", clear_on_submit=True):
@@ -73,9 +75,15 @@ def main():
     if st.session_state.conversation:
         for speaker, message in st.session_state.conversation:
             if speaker == "You":
-                st.markdown(f'<div class="message_container"><div class="user_message">{message}</div></div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="message_container"><div class="user_message">{message}</div></div>',
+                    unsafe_allow_html=True
+                )
             else:
-                st.markdown(f'<div class="message_container"><div class="bot_message">{message}</div></div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="message_container"><div class="bot_message">{message}</div></div>',
+                    unsafe_allow_html=True
+                )
 
 if __name__ == "__main__":
     main()
