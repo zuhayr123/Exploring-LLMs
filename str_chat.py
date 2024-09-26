@@ -1,5 +1,5 @@
 import streamlit as st
-from chat_llm_module_memory import ChatLLM
+from chat_llm_module_memory_chart_chat import ChatLLM
 
 # Injecting custom CSS for the chat bubbles
 def set_custom_css():
@@ -65,25 +65,34 @@ def main():
 
         if submitted and user_input:
             # Get the answer from the LLM module
-            response = chat_llm.get_response(user_input)
+            response, fig = chat_llm.get_response(user_input)
 
             # Append the conversation to the session state
             st.session_state.conversation.append(("You", user_input))
-            st.session_state.conversation.append(("Bot", response))
+            st.session_state.conversation.append(("Bot", response, fig))
 
     # Display the conversation in chat bubbles
     if st.session_state.conversation:
-        for speaker, message in st.session_state.conversation:
-            if speaker == "You":
+        for entry in st.session_state.conversation:
+            if entry[0] == "You":
                 st.markdown(
-                    f'<div class="message_container"><div class="user_message">{message}</div></div>',
+                    f'<div class="message_container"><div class="user_message">{entry[1]}</div></div>',
                     unsafe_allow_html=True
                 )
             else:
-                st.markdown(
-                    f'<div class="message_container"><div class="bot_message">{message}</div></div>',
-                    unsafe_allow_html=True
-                )
+                # Check if a figure is associated with the response
+                if len(entry) > 2 and entry[2] is not None:
+                    st.markdown(
+                        f'<div class="message_container"><div class="bot_message">{entry[1]}</div></div>',
+                        unsafe_allow_html=True
+                    )
+                    # Display the figure
+                    st.pyplot(entry[2], use_container_width=True)
+                else:
+                    st.markdown(
+                        f'<div class="message_container"><div class="bot_message">{entry[1]}</div></div>',
+                        unsafe_allow_html=True
+                    )
 
 if __name__ == "__main__":
     main()

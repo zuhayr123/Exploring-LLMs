@@ -16,6 +16,7 @@ class ChatLLM:
         # Initialize LLM and database
         self.llm = Ollama(model=model_name)
         self.db = SQLDatabase.from_uri(db_uri)
+        self.figures = []
 
         # Initialize memory
         self.memory = ConversationBufferMemory(memory_key="chat_history", input_key="question", output_key="answer")
@@ -79,8 +80,8 @@ class ChatLLM:
         
         # Prompt template for generating plotting code
         self.plot_code_prompt = PromptTemplate(
-                    input_variables=["sql_result", "question"],
-                    template="""
+            input_variables=["sql_result", "question"],
+            template="""
         Given the following SQL query result and the user's question, generate Python code using matplotlib and pandas to plot the graph that answers the question. Use the data in the SQL result to create the plot. The SQL result is provided as a variable 'sql_result', which is a list of dictionaries. You can convert it into a pandas DataFrame for plotting. Ensure the code is syntactically correct and uses proper labels and titles.
 
         SQL Result:
@@ -91,8 +92,21 @@ class ChatLLM:
 
         Provide only the code, without any explanations or additional text.
 
-        Python code:"""
-                )        
+        Python code:
+        import matplotlib.pyplot as plt
+        import pandas as pd
+
+        # Assuming sql_result is a list of dictionaries
+        df = pd.DataFrame(sql_result)
+
+        # Create the figure and axis objects
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Your plotting code here using 'ax'
+
+        # Do not call plt.show()
+        """
+        )
 
         # Create the SQL query chain
         self.write_query = LLMChain(
@@ -113,28 +127,6 @@ class ChatLLM:
         # Check if the user intends to draw a graph by looking for specific keywords
         graph_keywords = ["graph", "plot", "chart", "visualize"]
         return any(keyword in question.lower() for keyword in graph_keywords)
-    
-    def plot_graph(self, sql_result):
-        # Use pandas to convert the result into a DataFrame and matplotlib to plot it
-        if isinstance(sql_result, list) and len(sql_result) > 0:
-            # Convert the list of dictionaries to a DataFrame
-            df = pd.DataFrame(sql_result)
-            # Convert 'Salary' column to a numeric type (float) to ensure it can be plotted
-            df['Salary'] = df['Salary'].apply(lambda x: float(x) if isinstance(x, Decimal) else x)
-            
-            # Create a new column 'FullName' to combine first and last name for the X-axis
-            df['FullName'] = df['FirstName'] + ' ' + df['LastName']
-            
-            # Plot the data
-            df.plot(x='FullName', y='Salary', kind='line')
-            plt.xlabel('Employee Name')
-            plt.ylabel('Salary')
-            plt.title('Employee Salary Graph')
-            plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
-            plt.tight_layout()  # Adjust layout to prevent label cutoff
-            plt.show()
-        else:
-            print("No data available to plot.")  
 
     def _create_chain(self):
         # Function to generate SQL query with context
@@ -226,9 +218,18 @@ class ChatLLM:
             local_vars = {'sql_result': sql_result}
             try:
                 exec(code, {}, local_vars)
+                fig = local_vars.get('fig', None)
+                if fig is None:
+                    # Attempt to retrieve 'fig' if not directly assigned
+                    fig = local_vars.get('plt', None)
+                    if fig and hasattr(fig, 'gcf'):
+                        fig = fig.gcf()
+                if fig:
+                    self.figures.append(fig)
+                else:
+                    print("No figure object 'fig' was created in the plot code.")
             except Exception as e:
                 print(f"Error executing plot code: {e}")
-
 
         # Function to add context before generating the final answer
         def add_context(inputs):
