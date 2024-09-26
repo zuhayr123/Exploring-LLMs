@@ -1,5 +1,5 @@
 import streamlit as st
-from chat_llm_module_memory_chart_chat import ChatLLM
+from chat_llm_module_memory_chart import ChatLLM
 
 # Injecting custom CSS for the chat bubbles
 def set_custom_css():
@@ -65,8 +65,8 @@ def main():
 
         if submitted and user_input:
             # Get the answer from the LLM module
-            response, fig = chat_llm.get_response(user_input)
-
+            response = chat_llm.get_response(user_input)
+            fig = chat_llm.figures[-1]
             # Append the conversation to the session state
             st.session_state.conversation.append(("You", user_input))
             st.session_state.conversation.append(("Bot", response, fig))

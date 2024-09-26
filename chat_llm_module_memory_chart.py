@@ -66,7 +66,7 @@ class ChatLLM:
 
         # Prompt template for answering the question
         self.answer_prompt = PromptTemplate.from_template(
-                    """Database Description:
+            """Database Description:
         {database_description}
 
         {chat_history}
@@ -75,8 +75,13 @@ class ChatLLM:
         Question: {question}
         SQL Query: {query}
         SQL Result: {result}
+
+        If the SQL Result is "Graph has been generated and stored.", respond only and only with "Here's is the graph you asked for." only.
+
+        Otherwise, provide a detailed answer.
+
         Answer:"""
-                )
+        )
         
         # Prompt template for generating plotting code
         self.plot_code_prompt = PromptTemplate(
@@ -184,7 +189,7 @@ class ChatLLM:
                     return {
                         "question": question,
                         "query": sql_query,
-                        "result": "Graph displayed."
+                        "result": "Graph has been generated and stored"
                     }
                 else:
                     return {
