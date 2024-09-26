@@ -76,11 +76,34 @@ class ChatLLM:
         SQL Result: {result}
         Answer:"""
                 )
+        
+        # Prompt template for generating plotting code
+        self.plot_code_prompt = PromptTemplate(
+                    input_variables=["sql_result", "question"],
+                    template="""
+        Given the following SQL query result and the user's question, generate Python code using matplotlib and pandas to plot the graph that answers the question. Use the data in the SQL result to create the plot. The SQL result is provided as a variable 'sql_result', which is a list of dictionaries. You can convert it into a pandas DataFrame for plotting. Ensure the code is syntactically correct and uses proper labels and titles.
+
+        SQL Result:
+        {sql_result}
+
+        Question:
+        {question}
+
+        Provide only the code, without any explanations or additional text.
+
+        Python code:"""
+                )        
 
         # Create the SQL query chain
         self.write_query = LLMChain(
             llm=self.llm,
             prompt=self.sql_prompt
+        )
+
+        # Chain to generate plotting code
+        self.generate_plot_code_chain = LLMChain(
+            llm=self.llm,
+            prompt=self.plot_code_prompt
         )
 
         # Create the LLM chain
@@ -152,8 +175,20 @@ class ChatLLM:
                         result = f"Error executing SQL query: {e}"
                 # If graph intent is detected, plot the result
                 if self.detect_graph_intent(question):
-                    # print(result)
-                    self.plot_graph(new_result)
+                    # Prepare inputs for plotting code generation
+                    plot_code_inputs = {
+                        'sql_result': str(new_result),
+                        'question': question
+                    }
+                    # Generate the plotting code
+                    plot_code_response = self.generate_plot_code_chain.run(plot_code_inputs)
+
+                    print("Plot Code Response:" + plot_code_response)
+                    # Extract the code from the response
+                    plot_code = extract_code_from_response(plot_code_response)
+                    # Execute the plotting code
+                    execute_plot_code(plot_code, new_result)
+                    # Return the result indicating that the graph was displayed
                     return {
                         "question": question,
                         "query": sql_query,
@@ -174,6 +209,26 @@ class ChatLLM:
                 }
 
         extract_and_execute = RunnableLambda(extract_and_execute_sql)
+
+        def extract_code_from_response(response):
+            # Use regex to extract code within code blocks
+            code_pattern = re.compile(r'```python(.*?)```', re.DOTALL)
+            match = code_pattern.search(response)
+            if match:
+                code = match.group(1).strip()
+            else:
+                # If no code block, just return the response
+                code = response.strip()
+            return code
+        
+        def execute_plot_code(code, sql_result):
+            # Create a local namespace for exec()
+            local_vars = {'sql_result': sql_result}
+            try:
+                exec(code, {}, local_vars)
+            except Exception as e:
+                print(f"Error executing plot code: {e}")
+
 
         # Function to add context before generating the final answer
         def add_context(inputs):
