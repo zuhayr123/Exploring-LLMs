@@ -63,10 +63,15 @@ def main():
         user_input = st.text_input("You:", placeholder="Enter your question here...", max_chars=100)
         submitted = st.form_submit_button("Send")
 
+        fig = None
+
         if submitted and user_input:
             # Get the answer from the LLM module
             response = chat_llm.get_response(user_input)
-            fig = chat_llm.figures[-1]
+            if chat_llm.figures:
+                fig = chat_llm.figures[-1]
+
+            chat_llm.figures = []
             # Append the conversation to the session state
             st.session_state.conversation.append(("You", user_input))
             st.session_state.conversation.append(("Bot", response, fig))
