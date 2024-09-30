@@ -113,6 +113,24 @@ class ChatLLM:
         """
         )
 
+        # Create a prompt for classification
+        self.classification_prompt = PromptTemplate.from_template(
+            """
+            Given the user's question and the assistant's answer, determine whether the assistant's answer contains the information requested by the user.
+
+            Question: {question}
+            Answer: {answer}
+
+            Does the answer contain the information requested? Respond with "Yes" or "No" only.
+            """
+        )
+
+        # Create an LLM chain for classification
+        self.classification_chain = LLMChain(
+            llm=self.llm,
+            prompt=self.classification_prompt
+        )
+
         # Create the SQL query chain
         self.write_query = LLMChain(
             llm=self.llm,
@@ -288,13 +306,19 @@ class ChatLLM:
                 answer = response["result"]
                 source_documents = response["source_documents"]
 
-                # Check if any documents were retrieved
-                if source_documents:
+                # Use the LLM to classify whether the answer contains the information
+                classification_input = {
+                    "question": question,
+                    "answer": answer
+                }
+                classification_result = self.classification_chain.run(classification_input).strip().lower()
+
+                if classification_result == "yes":
                     # Update memory
                     self.memory.save_context({"question": question}, {"answer": answer})
                     return answer
                 else:
-                    # No documents found, proceed to SQL chain
+                    # Proceed to SQL chain
                     pass
             except Exception as e:
                 # If there is any error, proceed to SQL chain
