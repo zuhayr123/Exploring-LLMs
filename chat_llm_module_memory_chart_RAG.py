@@ -6,15 +6,13 @@ from langchain.schema.runnable import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMChain
-
-# New imports for embeddings and vector store
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import TextLoader
+from langchain.embeddings import HuggingFaceEmbeddings  # Use an embedding model compatible with your setup
+from langchain.vectorstores import FAISS
+from langchain.chains import RetrievalQA
 
 class ChatLLM:
-    def __init__(self, model_name="llama3.1", db_uri="postgresql://abouzuhayr:@localhost:5432/postgres"):
+    def __init__(self, model_name="llama3.1", db_uri="postgresql://abouzuhayr:@localhost:5432/postgres", document_path='text_doc.md'):
         # Initialize LLM and database
         self.llm = Ollama(model=model_name)
         self.db = SQLDatabase.from_uri(db_uri)
@@ -127,66 +125,38 @@ class ChatLLM:
             prompt=self.plot_code_prompt
         )
 
-        self.embeddings = HuggingFaceEmbeddings()
-        self.vectorstore = self._initialize_vectorstore("text_doc.txt")
-
         # Create the LLM chain
         self.chain = self._create_chain()
 
-    # New method to initialize the vector store
-    def _initialize_vectorstore(self, document_path):
-        # Load and split the text document
-        loader = TextLoader(document_path)
-        documents = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        texts = text_splitter.split_documents(documents)
+         # Load the text document if provided
+        if document_path:
+            # Load the document
+            loader = TextLoader(document_path)
+            documents = loader.load()
 
-        # Generate embeddings and create the vector store
-        texts_content = [t.page_content for t in texts]
-        embeddings = self.embeddings.embed_documents(texts_content)
-        vectorstore = FAISS.from_texts(texts_content, self.embeddings)
+            # Create embeddings and vectorstore
+            embeddings = HuggingFaceEmbeddings()
+            vectorstore = FAISS.from_documents(documents, embeddings)
 
-        return vectorstore
-    
+            # Create a retriever
+            retriever = vectorstore.as_retriever()
+
+            # Create a RetrievalQA chain
+            self.retrieval_qa_chain = RetrievalQA.from_chain_type(
+                llm=self.llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True
+            )
+        else:
+            self.retrieval_qa_chain = None
+
     def detect_graph_intent(self, question):
         # Check if the user intends to draw a graph by looking for specific keywords
         graph_keywords = ["graph", "plot", "chart", "visualize"]
         return any(keyword in question.lower() for keyword in graph_keywords)
 
     def _create_chain(self):
-        # New function to decide whether to use the document or database
-        def decide_source(inputs):
-            question = inputs['question']
-
-            # Check if the question is about personal information
-            docs = self.vectorstore.similarity_search(question, k=2)
-            if docs:
-                print("Relevant documents found.")
-                # If relevant documents are found, use them to generate an answer
-                context = "\n\n".join([doc.page_content for doc in docs])
-
-                # Create a prompt with the context
-                prompt = f"""
-                You are an assistant who provides answers based on the following context:
-
-                {context}
-
-                Question: {question}
-
-                Answer:"""
-                # Get the answer from the LLM
-                answer = self.llm(prompt)
-                print(answer)
-
-                # Return the answer directly
-                return {'answer': answer, 'question': question}
-            else:
-                print("No relevant documents found.")
-                # Proceed with the existing chain
-                return inputs  # Pass inputs to the next step
-
-        decide_source_runnable = RunnableLambda(decide_source)
-        
         # Function to generate SQL query with context
         def write_query_with_question(inputs):
             chat_history = self.memory.load_memory_variables({}).get('chat_history', '')
@@ -300,7 +270,6 @@ class ChatLLM:
 
         # Combine everything into a chain
         chain = (
-            decide_source_runnable|
             write_query_runnable
             | extract_and_execute
             | add_context_runnable
@@ -311,6 +280,27 @@ class ChatLLM:
         return chain
 
     def get_response(self, question):
+        # If the retrieval QA chain is available, try to answer using the text document
+        if self.retrieval_qa_chain:
+            try:
+                # Get answer from RetrievalQA chain
+                response = self.retrieval_qa_chain({"query": question})
+                answer = response["result"]
+                source_documents = response["source_documents"]
+
+                # Check if any documents were retrieved
+                if source_documents:
+                    # Update memory
+                    self.memory.save_context({"question": question}, {"answer": answer})
+                    return answer
+                else:
+                    # No documents found, proceed to SQL chain
+                    pass
+            except Exception as e:
+                # If there is any error, proceed to SQL chain
+                print(f"Error in RetrievalQA chain: {e}")
+
+        # If answer not acceptable or error occurs, proceed with existing chain
         # Prepare the inputs
         inputs = {
             "question": question,
