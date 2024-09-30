@@ -6,9 +6,11 @@ from langchain.schema.runnable import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMChain
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.document_loaders import TextLoader
+
+# New imports for embeddings and vector store
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 class ChatLLM:
@@ -17,10 +19,6 @@ class ChatLLM:
         self.llm = Ollama(model=model_name)
         self.db = SQLDatabase.from_uri(db_uri)
         self.figures = []
-
-        # Initialize embeddings and vector store for the text document
-        self.embeddings = HuggingFaceEmbeddings()
-        self.vectorstore = self._initialize_vectorstore("text_doc.txt")
 
         # Initialize memory
         self.memory = ConversationBufferMemory(memory_key="chat_history", input_key="question", output_key="answer")
@@ -129,15 +127,66 @@ class ChatLLM:
             prompt=self.plot_code_prompt
         )
 
+        self.embeddings = HuggingFaceEmbeddings()
+        self.vectorstore = self._initialize_vectorstore("text_doc.txt")
+
         # Create the LLM chain
         self.chain = self._create_chain()
 
+    # New method to initialize the vector store
+    def _initialize_vectorstore(self, document_path):
+        # Load and split the text document
+        loader = TextLoader(document_path)
+        documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        texts = text_splitter.split_documents(documents)
+
+        # Generate embeddings and create the vector store
+        texts_content = [t.page_content for t in texts]
+        embeddings = self.embeddings.embed_documents(texts_content)
+        vectorstore = FAISS.from_texts(texts_content, self.embeddings)
+
+        return vectorstore
+    
     def detect_graph_intent(self, question):
         # Check if the user intends to draw a graph by looking for specific keywords
         graph_keywords = ["graph", "plot", "chart", "visualize"]
         return any(keyword in question.lower() for keyword in graph_keywords)
 
     def _create_chain(self):
+        # New function to decide whether to use the document or database
+        def decide_source(inputs):
+            question = inputs['question']
+
+            # Check if the question is about personal information
+            docs = self.vectorstore.similarity_search(question, k=2)
+            if docs:
+                print("Relevant documents found.")
+                # If relevant documents are found, use them to generate an answer
+                context = "\n\n".join([doc.page_content for doc in docs])
+
+                # Create a prompt with the context
+                prompt = f"""
+                You are an assistant who provides answers based on the following context:
+
+                {context}
+
+                Question: {question}
+
+                Answer:"""
+                # Get the answer from the LLM
+                answer = self.llm(prompt)
+                print(answer)
+
+                # Return the answer directly
+                return {'answer': answer, 'question': question}
+            else:
+                print("No relevant documents found.")
+                # Proceed with the existing chain
+                return inputs  # Pass inputs to the next step
+
+        decide_source_runnable = RunnableLambda(decide_source)
+        
         # Function to generate SQL query with context
         def write_query_with_question(inputs):
             chat_history = self.memory.load_memory_variables({}).get('chat_history', '')
@@ -251,6 +300,7 @@ class ChatLLM:
 
         # Combine everything into a chain
         chain = (
+            decide_source_runnable|
             write_query_runnable
             | extract_and_execute
             | add_context_runnable

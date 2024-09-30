@@ -1,5 +1,5 @@
 import streamlit as st
-from chat_llm_module_memory_chart import ChatLLM
+from chat_llm_module_memory_chart_RAG import ChatLLM
 
 # Injecting custom CSS for the chat bubbles
 def set_custom_css():
