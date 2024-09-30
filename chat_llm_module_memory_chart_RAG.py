@@ -116,12 +116,10 @@ class ChatLLM:
         # Create a prompt for classification
         self.classification_prompt = PromptTemplate.from_template(
             """
-            Given the user's question and the assistant's answer, determine whether the assistant's answer contains the information requested by the user.
+            Given the user's question and the assistant's answer, determine whether the assistant's answer addresses the user's question, it is okay even if the answer is only partially correct, as long as it is not completely empty of any information, in such cases start your answer with yes, otherwise no.
 
             Question: {question}
             Answer: {answer}
-
-            Does the answer contain the information requested? Respond with "Yes" or "No" only.
             """
         )
 
@@ -304,6 +302,7 @@ class ChatLLM:
                 # Get answer from RetrievalQA chain
                 response = self.retrieval_qa_chain({"query": question})
                 answer = response["result"]
+                print('RetrievalQA answer:', answer)
                 source_documents = response["source_documents"]
 
                 # Use the LLM to classify whether the answer contains the information
@@ -313,7 +312,9 @@ class ChatLLM:
                 }
                 classification_result = self.classification_chain.run(classification_input).strip().lower()
 
-                if classification_result == "yes":
+                print('Classification result:', classification_result)
+
+                if "yes" in classification_result:
                     # Update memory
                     self.memory.save_context({"question": question}, {"answer": answer})
                     return answer
